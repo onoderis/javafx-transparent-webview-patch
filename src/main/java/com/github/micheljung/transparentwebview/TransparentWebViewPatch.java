@@ -44,7 +44,6 @@ public class TransparentWebViewPatch implements ClassFileTransformer {
   @Override
   public byte[] transform(ClassLoader loader, String className, Class<?> class_being_redefined, ProtectionDomain protection_domain, byte[] byteCode) {
     if (className.equals("com/sun/webkit/WebPage")) {
-      System.out.println("> Patching " + className + " ...");
       try {
         CtClass ctClass = CLASS_POOL.makeClass(new ByteArrayInputStream(byteCode));
 
@@ -57,13 +56,16 @@ public class TransparentWebViewPatch implements ClassFileTransformer {
             + "setBackgroundColor(0);\n"
             + "}");
 
+        CLASS_POOL.importPackage("com.sun.webkit.graphics");
+
         // Then we replace the scroll method body in order to force the
         // repaint of the entire frame
         // when the page is scrolled
         CtMethod scrollMethod = ctClass.getDeclaredMethod("scroll");
-        scrollMethod.setBody(
+        scrollMethod.insertBefore(
             "{\n" + "   "
                 + "addDirtyRect(new com.sun.webkit.graphics.WCRectangle(0f,0f,(float)width,(float)height));\n"
+                + "return;"
                 + "}"
         );
         byteCode = ctClass.toBytecode();
@@ -73,15 +75,13 @@ public class TransparentWebViewPatch implements ClassFileTransformer {
         e.printStackTrace();
         return byteCode;
       }
-      System.out.println("> " + className + " patching succeeded!");
-    } else if ("com/sun/javafx/webkit/prism/WCGraphicsPrismContext".equals(className)) {
-      System.out.println("> Patching " + className + " ...");
+    } else if (className.equals("com/sun/javafx/webkit/prism/WCGraphicsPrismContext")) {
       try {
         CtClass ctClass = CLASS_POOL.makeClass(new ByteArrayInputStream(byteCode));
 
         // Then, we edit the the WCGraphicsPrismContext.setClip method
         // in order to call clearRect over the area of the clip.
-        CtClass signature[] = new CtClass[]{CLASS_POOL.get("com.sun.webkit.graphics.WCRectangle")};
+        CtClass[] signature = new CtClass[]{CLASS_POOL.get("com.sun.webkit.graphics.WCRectangle")};
         CtMethod setClipMethod = ctClass.getDeclaredMethod("setClip", signature);
         setClipMethod.insertBefore(
             "{" + "  "
@@ -94,7 +94,6 @@ public class TransparentWebViewPatch implements ClassFileTransformer {
         e.printStackTrace();
         return byteCode;
       }
-      System.out.println("> " + className + " patching succeeded!");
     }
 
     return byteCode;
